@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""
+blocked_issues
+
+FOR THOSE USING GITHUB and ZENHUB for software product development issue
+tracking!
+
+# Need
+It's hard to get a quick summary of what issues are blocked in Zenhub
+(www.zenhub.com).
+
+# Approach
+blocked_issues will create a markdown report of issues that are blocked.
+
+WRONGFULLY ASSUMES that you have one github repository in one zenhub
+workspace. You'll have to modify the script if this is not true for your
+project!
+"""
+import sys
+import os
+import argparse
+import requests
+from functools import lru_cache
+from collections import defaultdict, namedtuple
+
+ZENHUB_API_TOKEN = os.environ['ZENHUB_API_TOKEN']
+GITHUB_API_TOKEN = os.environ['GITHUB_API_TOKEN']
+
+Dependency = namedtuple('Dependency', 'blocking_issue_num blocked_issue_num')
+
+class RepoClient:
+
+    def __init__(self, zenhub_repo_id, github_repo):
+        self.zenhub_repo_id = zenhub_repo_id
+        self.github_repo = github_repo
+        workspaces = self.zenhub_get("/workspaces", v='p2')
+        assert (len(workspaces) == 1)
+        self.zenhub_workspace_id = workspaces[0]['id']
+
+    @lru_cache(maxsize=32)
+    def zenhub_get(self, path, v='p1'):
+        return requests.get(
+            url=f"https://api.zenhub.com/{v}/repositories/{self.zenhub_repo_id}{path}",
+            headers={
+                'X-Authentication-Token': ZENHUB_API_TOKEN
+            }
+        ).json()
+
+    @lru_cache(maxsize=32)
+    def github_get(self, path):
+        response = requests.get(
+            url=f"https://api.github.com/repos/{self.github_repo}{path}",
+            headers={
+                'Authorization': f"token {GITHUB_API_TOKEN}"
+            }
+        )
+        content = response.json()
+        if response.status_code != 200:
+            raise Exception(content['message'])
+        return content
+
+    def issue_to_str(self, issue, issue_status):
+        return f"#{issue['number']} " + \
+               f"[{issue['title']}](https://app.zenhub.com/workspaces/{self.zenhub_workspace_id}/issues/{self.github_repo}/{issue['number']}) " + \
+               f" ({issue_status})"
+
+
+def flatten(l):
+    return [item for sublist in l for item in sublist]
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='View a summary of blocked tasks.')
+    parser.add_argument('--in-progress', default=False, action='store_true', help='Blocked items In Progress')
+    parser.add_argument('--review-qa', default=False, action='store_true', help='Blocked items in Review/QA')
+    parser.add_argument('--backlog', default=False, action='store_true', help='Blocked items in the Backlog')
+    parser.add_argument('--new-issues', default=False, action='store_true', help='Blocked items in New Issues')
+    parser.add_argument('--epics', default=False, action='store_true', help='Blocked items in Epics')
+    parser.add_argument('github_repo', type=str, help='<organzation>/<repo>')
+    parser.add_argument('zenhub_repo_id', type=int, help='zenhub repository id')
+    args = parser.parse_args()
+
+    report_issue_statuses = set()
+    flag_mapping = [
+        (args.in_progress, 'In Progress'),
+        (args.review_qa, 'Review/QA'),
+        (args.backlog, 'Backlog'),
+        (args.new_issues, 'New Issues'),
+        (args.epics, 'Epics'),
+    ]
+
+    for flag_active, status_string in flag_mapping:
+        if flag_active:
+            report_issue_statuses.add(status_string)
+
+    if len(report_issue_statuses) == 0:
+        parser.print_help()
+        sys.exit(1)
+
+    client = RepoClient(args.zenhub_repo_id, args.github_repo)
+
+    dependencies = [
+        Dependency(
+            blocking_issue_num=ele['blocking']['issue_number'],
+            blocked_issue_num=ele['blocked']['issue_number']
+        ) for ele in client.zenhub_get('/dependencies')['dependencies']
+    ]
+
+    distinct_issues = set(flatten([dep.blocking_issue_num, dep.blocked_issue_num] for dep in dependencies))
+
+    issue_status = dict(
+        (issue_num, client.zenhub_get(f"/issues/{issue_num}").get('pipeline', dict(name=None))['name'])
+        for issue_num in distinct_issues
+    )
+
+    issues = dict(
+        (issue_num, client.github_get(f"/issues/{issue_num}"))
+        for issue_num in distinct_issues
+        if issue_status[issue_num] is not None
+    )
+
+    blocking_issues = defaultdict(list)
+    for dep in dependencies:
+        if issue_status[dep.blocked_issue_num] and issue_status[dep.blocking_issue_num]:
+            blocking_issues[dep.blocked_issue_num].append(dep.blocking_issue_num)
+
+    for blocked, blockers in blocking_issues.items():
+        blocked_issue_status = issue_status[blocked]
+        blocked_issue = issues[blocked]
+        blocker_issues = [issues[num] for num in blockers if issue_status[num]]
+
+        if blocked_issue_status not in report_issue_statuses:
+            continue
+
+        print(f"**Blocked issue:** {client.issue_to_str(blocked_issue, blocked_issue_status)}")
+        for blocker_issue in blocker_issues:
+            print(f"* {client.issue_to_str(blocker_issue, blocked_issue_status)}")
+        print("")
