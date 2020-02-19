@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+
+import datetime
+import gcal
+import argparse
+from tzlocal import get_localzone
+from audit import TimeAudit
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Visualization of your time usage based on GCal events.')
+    parser.add_argument('--num-days', type=int, default=30, help='Lookback period in days to audit')
+    parser.add_argument('creative_hours_start_date', type=str, help='YYYY-MM-DD')
+    parser.add_argument('gcal_id', type=str, help='ID of the Google Calendar to Audit')
+    args = parser.parse_args()
+
+    num_days = args.num_days
+
+    now = datetime.datetime.now(tz=get_localzone())
+    start_datetime = (now - datetime.timedelta(days=num_days)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    events = gcal.get_events(args.gcal_id, start_datetime, now)
+
+    audit = TimeAudit(events, creative_hours_start_date=args.creative_hours_start_date)
+    audit.plots(renderer="browser")
