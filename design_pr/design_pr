@@ -3,8 +3,9 @@ set -e
 
 if [[ ("$#" -ne "1") || ("$1" = "-h") || ("$1" = "--help") ]]; then
   echo "wip_pr_for_issue"
+  echo "Creates an empty PR on GitHub for fixing a given issue."
+  echo "\nIMPORTANT: Make sure you start in your local directory for the repo!\n"
   echo "usage: wip_pr_for_issue [repository] [issue_number]"
-  echo " - repository - of the format <organization or user>/<repo> (example: humancellatlas/dcp-prototype)"
   echo " - issue_number - GitHub issue number in that repository"
   exit 1
 fi
