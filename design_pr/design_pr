@@ -5,7 +5,7 @@ if [[ ("$#" -ne "1") || ("$1" = "-h") || ("$1" = "--help") ]]; then
   echo "design_pr"
   echo "Creates an empty PR on GitHub for fixing a given issue."
   echo "\nIMPORTANT: Make sure you start in your local directory for the repo!\n"
-  echo "usage: design_pr [repository] [issue_number]"
+  echo "usage: design_pr [issue_number]"
   echo " - issue_number - GitHub issue number in that repository"
   exit 1
 fi
