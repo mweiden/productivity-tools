@@ -1,0 +1,36 @@
+#!/usr/bin/env zsh
+set -e
+
+if [[ ("$#" -ne "1") || ("$1" = "-h") || ("$1" = "--help") ]]; then
+  echo "wip_pr_for_issue"
+  echo "usage: wip_pr_for_issue [repository] [issue_number]"
+  echo " - repository - of the format <organization or user>/<repo> (example: humancellatlas/dcp-prototype)"
+  echo " - issue_number - GitHub issue number in that repository"
+  exit 1
+fi
+
+REPOSITORY="$(git config --get remote.origin.url | sed 's/git@github.com://' | sed -e 's/\.git$//')"
+ISSUE_NUM="$1"
+
+ISSUE_LINK="https://github.com/${REPOSITORY}/issues/${ISSUE_NUM}"
+
+USERNAME=$(python -c \
+    'import re; import sys; username = re.compile(r"^(?:[^+]+[+])(?P<username>[a-zA-Z0-9_.-]+)@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").match(sys.argv[1]).group("username"); print(username)' \
+    "`git config user.email`")
+
+BRANCH_NAME="${USERNAME}/${ISSUE_NUM}-design"
+
+git checkout master
+git checkout -b "${BRANCH_NAME}"
+
+git commit --allow-empty -F- <<EOF
+Design for issue #${ISSUE_NUM}
+
+Fixes ${ISSUE_LINK}
+EOF
+
+git push
+git checkout master
+
+
+open "https://github.com/${REPOSITORY}/compare/${BRANCH_NAME}?expand=1"
