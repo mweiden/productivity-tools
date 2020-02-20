@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-set -e
+set -ex
 
 if [[ ("$#" -ne "1") || ("$1" = "-h") || ("$1" = "--help") ]]; then
   echo "design_pr"
@@ -10,14 +10,22 @@ if [[ ("$#" -ne "1") || ("$1" = "-h") || ("$1" = "--help") ]]; then
   exit 1
 fi
 
-REPOSITORY="$(git config --get remote.origin.url | sed 's/git@github.com://' | sed -e 's/\.git$//')"
 ISSUE_NUM="$1"
 
+REPOSITORY="$(git config --get remote.origin.url | sed 's/git@github.com://' | sed -e 's/\.git$//')"
 ISSUE_LINK="https://github.com/${REPOSITORY}/issues/${ISSUE_NUM}"
+GIT_EMAIL="$(git config user.email)"
 
-USERNAME=$(python -c \
-    'import re; import sys; username = re.compile(r"^(?:[^+]+[+])(?P<username>[a-zA-Z0-9_.-]+)@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").match(sys.argv[1]).group("username"); print(username)' \
-    "`git config user.email`")
+USERNAME=$(python -c '
+import re
+import sys
+
+username = re.compile(
+    r"^(?:[^+]+[+])(?P<username>[a-zA-Z0-9_.-]+)@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").match(sys.argv[1]
+).group("username")
+
+print(username)' \
+  "$GIT_EMAIL")
 
 BRANCH_NAME="${USERNAME}/${ISSUE_NUM}-design"
 
