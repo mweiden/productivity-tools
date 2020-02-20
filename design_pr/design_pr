@@ -21,11 +21,11 @@ import re
 import sys
 
 username = re.compile(
-    r"^(?:[^+]+[+])(?P<username>[a-zA-Z0-9_.-]+)@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").match(sys.argv[1]
-).group("username")
+    r"^(?:[^+]+[+])(?P<username>[a-zA-Z0-9_.-]+)@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+).match(sys.argv[1]).group("username")
 
-print(username)' \
-  "$GIT_EMAIL")
+print(username)
+' "$GIT_EMAIL")
 
 BRANCH_NAME="${USERNAME}/${ISSUE_NUM}-design"
 
