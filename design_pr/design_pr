@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-set -ex
+set -e
 
 if [[ ("$#" -ne "1") || ("$1" = "-h") || ("$1" = "--help") ]]; then
   echo "design_pr"
@@ -41,5 +41,5 @@ EOF
 git push
 git checkout master
 
-
 open "https://github.com/${REPOSITORY}/compare/${BRANCH_NAME}?expand=1"
+
