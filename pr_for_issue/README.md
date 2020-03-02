@@ -11,7 +11,7 @@ issue number.
 1. A github account that is [connected with your ssh
   key](https://help.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)
 
-## Documentation
+## Usage
 
 Use `pr_for_issue -h` to see documentation:
 
