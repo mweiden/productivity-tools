@@ -2,10 +2,10 @@
 set -e
 
 if [[ ("$#" -ne "1") || ("$1" = "-h") || ("$1" = "--help") ]]; then
-  echo "design_pr"
+  echo "pr_for_issue"
   echo "Creates an empty PR on GitHub for fixing a given issue."
   echo "\nIMPORTANT: Make sure you start in your local directory for the repo!\n"
-  echo "usage: design_pr [issue_number]"
+  echo "usage: pr_for_issue [issue_number]"
   echo " - issue_number - GitHub issue number in that repository"
   exit 1
 fi
@@ -27,18 +27,18 @@ username = re.compile(
 print(username)
 ' "$GIT_EMAIL")
 
-BRANCH_NAME="${USERNAME}/${ISSUE_NUM}-design"
+BRANCH_NAME="${USERNAME}/${ISSUE_NUM}-pr"
 
 git checkout master
 git checkout -b "${BRANCH_NAME}"
 
 git commit --allow-empty -F- <<EOF
-Design for issue #${ISSUE_NUM}
+PR for issue #${ISSUE_NUM}
 
 Fixes ${ISSUE_LINK}
 EOF
 
-git push
+git push -u origin HEAD
 git checkout master
 
 open "https://github.com/${REPOSITORY}/compare/${BRANCH_NAME}?expand=1"
