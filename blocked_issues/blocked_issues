@@ -16,10 +16,11 @@ WRONGFULLY ASSUMES that you have one github repository in one zenhub
 workspace. You'll have to modify the script if this is not true for your
 project!
 """
-import sys
-import os
 import argparse
+import os
+import re
 import requests
+import sys
 from functools import lru_cache
 from collections import defaultdict, namedtuple
 
@@ -27,6 +28,7 @@ ZENHUB_API_TOKEN = os.environ['ZENHUB_API_TOKEN']
 GITHUB_API_TOKEN = os.environ['GITHUB_API_TOKEN']
 
 Dependency = namedtuple('Dependency', 'blocking_issue_num blocked_issue_num')
+
 
 class RepoClient:
 
@@ -60,9 +62,21 @@ class RepoClient:
         return content
 
     def issue_to_str(self, issue, issue_status):
-        return f"#{issue['number']} " + \
+        return f"Issue #{issue['number']} " + \
                f"[{issue['title']}](https://app.zenhub.com/workspaces/{self.zenhub_workspace_id}/issues/{self.github_repo}/{issue['number']}) " + \
                f" ({issue_status})"
+
+    def pr_to_str(self, pr):
+        return f"PR #{pr['number']} " + \
+               f"[{pr['title']}](https://github.com/{self.github_repo}/pulls/{pr['number']}) "
+
+
+def extract_fixed_issues(repo, body):
+    body_without_comments = re.sub(r"(<!--.*?-->)", "", body, flags=re.DOTALL)
+    lines = body_without_comments.split("\n")
+    search_regexp = r"^(?:Fixes |Closes )(?:https://github[.]com/" + repo + r"/issues/|#)(?P<issue_num>[\d]+)$"
+    matches = [re.match(search_regexp, l, flags=re.IGNORECASE) for l in lines]
+    return [int(m.group('issue_num')) for m in matches if m]
 
 
 def flatten(l):
@@ -106,7 +120,27 @@ if __name__ == '__main__':
         ) for ele in client.zenhub_get('/dependencies')['dependencies']
     ]
 
-    distinct_issues = set(flatten([dep.blocking_issue_num, dep.blocked_issue_num] for dep in dependencies))
+    pr_issue_fixes = dict(flatten(ele for ele in [
+        flatten(
+            [
+                (
+                    issue_num,
+                    dict(
+                        number=pr['number'],
+                        url=pr['url'],
+                        title=pr['title']
+                    )
+                ) for issue_num in extract_fixed_issues(args.github_repo, ele)]
+            for ele in (
+                    [pr['title'], pr['body']] + [c['commit']['message'] for c in
+                                                 client.github_get(f"/pulls/{pr['number']}/commits")]
+            )
+        ) for pr in client.github_get("/pulls?state=open")
+    ] if len(ele) > 0))
+
+    distinct_issues = set(
+        flatten([dep.blocking_issue_num, dep.blocked_issue_num] for dep in dependencies) + list(pr_issue_fixes.keys())
+    )
 
     issue_status = dict(
         (issue_num, client.zenhub_get(f"/issues/{issue_num}").get('pipeline', dict(name=None))['name'])
@@ -124,15 +158,21 @@ if __name__ == '__main__':
         if issue_status[dep.blocked_issue_num] and issue_status[dep.blocking_issue_num]:
             blocking_issues[dep.blocked_issue_num].append(dep.blocking_issue_num)
 
-    for blocked, blockers in blocking_issues.items():
-        blocked_issue_status = issue_status[blocked]
-        blocked_issue = issues[blocked]
-        blocker_issues = [issues[num] for num in blockers if issue_status[num]]
+    for blocked_issue_num, blocking_issue_nums in sorted(blocking_issues.items(), key=lambda x: x[0]):
+        blocked_issue_status = issue_status[blocked_issue_num]
+        blocked_issue = issues[blocked_issue_num]
+        blocked_issue_pr = pr_issue_fixes.get(blocked_issue_num)
 
         if blocked_issue_status not in report_issue_statuses:
             continue
 
-        print(f"**Blocked issue:** {client.issue_to_str(blocked_issue, blocked_issue_status)}")
-        for blocker_issue in blocker_issues:
-            print(f"* {client.issue_to_str(blocker_issue, blocked_issue_status)}")
+        print(client.issue_to_str(blocked_issue, blocked_issue_status))
+        if blocked_issue_pr:
+            print(f"* {client.pr_to_str(blocked_issue_pr)}")
+
+        for blocker_issue_num in sorted(blocking_issue_nums):
+            blocker_issue_pr = pr_issue_fixes.get(blocker_issue_num)
+            print(f"* {client.issue_to_str(issues[blocker_issue_num], blocked_issue_status)}")
+            if blocker_issue_pr:
+                print(f"\t* {client.pr_to_str(blocker_issue_pr)}")
         print("")
